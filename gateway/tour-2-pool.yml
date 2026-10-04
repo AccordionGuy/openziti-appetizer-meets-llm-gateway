@@ -1,0 +1,14 @@
+# Step 8: a pool is copies of one backend. The gateway doesn't check which
+# models each endpoint actually has.
+listen: "127.0.0.1:8080"
+
+providers:
+  local:
+    endpoints:
+      - name: ollama
+        base_url: "http://127.0.0.1:11434"
+      - name: dummy-a
+        base_url: "http://127.0.0.1:8081"
+    health_check:
+      interval_seconds: 5
+      timeout_seconds: 2

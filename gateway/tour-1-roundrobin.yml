@@ -1,0 +1,13 @@
+# Step 7: two interchangeable backends. Round-robin, health checks, failover.
+listen: "127.0.0.1:8080"
+
+providers:
+  local:
+    endpoints:
+      - name: dummy-a
+        base_url: "http://127.0.0.1:8081"
+      - name: dummy-b
+        base_url: "http://127.0.0.1:8082"
+    health_check:
+      interval_seconds: 5
+      timeout_seconds: 2

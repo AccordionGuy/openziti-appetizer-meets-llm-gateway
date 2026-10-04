@@ -1,0 +1,35 @@
+# Copy this file to the root of your appetizer clone, alongside the existing
+# docker-compose.yml. Docker Compose merges a file named docker-compose.override.yml
+# automatically, so there is nothing to edit and no flags to pass.
+
+services:
+  classifier:
+    build: ./classifier
+    depends_on:
+      quickstart:
+        condition: service_healthy
+    environment:
+      # Written by classifier/wire-up.sh into the shared ./.ziti mount.
+      - ZITI_IDENTITY=/identity/classifier.json
+      # Must match the name the reflect server dials. See overlay/reflectServer.go.
+      - CLASSIFIER_SERVICE=classifier-service
+      - CLASSIFIER_MODEL=cardiffnlp/twitter-roberta-base-offensive
+      # The label THIS model emits for offensive text, lowercased. If you change
+      # CLASSIFIER_MODEL, read the id2label line the container prints at startup
+      # and update this - a mismatch shows up as a clean verdict, not an error.
+      - OFFENSIVE_LABELS=offensive
+      - CLASSIFIER_THRESHOLD=0.5
+      # Episode 2. Both values come from the shell that runs `docker compose up`.
+      # GATEWAY_URL unset = episode 1 behavior: the classifier never escalates.
+      - GATEWAY_URL=${GATEWAY_URL:-}
+      - GATEWAY_KEY=${CLASSIFIER_GATEWAY_KEY:-}
+      # Clean verdicts below this confidence get a second opinion.
+      - ESCALATE_BELOW=0.9
+    volumes:
+      - ./.ziti:/identity:ro
+    # Linux only: Docker Desktop defines host.docker.internal for you; Linux
+    # Docker doesn't. Uncomment this, and see "Running on Linux" in the README.
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    # No ports, and no network alias. The appetizer reaches this over the
+    # OpenZiti overlay by service name, not over the Docker network.

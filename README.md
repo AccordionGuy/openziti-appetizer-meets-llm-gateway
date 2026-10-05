@@ -636,7 +636,7 @@ claude-haiku-4-5-20251001 → OFFENSIVE
 claude-haiku-4-5-20251001 → OFFENSIVE
 ```
 
-💻 Now read Terminal 4. Each request logs its route and how the router got there:
+💻 Now read Terminal 4. line starts with a timestamp and the gateway's function name, followed by `semantic routing:`. Look at the endings of the most recent lines in the log, which should look like this:
 
 ```
 semantic routing: key='classifier' method=default route='general' model='gemma3:4b' confidence=0.00 latency=45ms cascade=[semantic:general:0.51:no_match,default:general]

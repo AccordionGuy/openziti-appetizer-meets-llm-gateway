@@ -1,14 +1,14 @@
 # A Second Opinion for the OpenZiti Appetizer Classifier
 
-In [episode 1](https://github.com/AccordionGuy/openziti-appetizer-classifier), you gave the [OpenZiti Appetizer](https://openziti.io/docs/learn/appetizer/) a classifier that decides whether a message is offensive before the Appetizer relays it. That classifier is fast, free, and gives the same answer every time. It’s also confidently wrong about messages like this one:
+In [the first exercise in this series](https://github.com/AccordionGuy/openziti-appetizer-classifier), you gave the [OpenZiti Appetizer](https://openziti.io/docs/learn/appetizer/) a classifier that decides whether a message is offensive before the Appetizer relays it. That classifier is fast, free, and gives the same answer every time. It’s also confidently wrong about messages like this one:
 
 > nobody here wants you around and everyone knows it
 
-It calls that **non-offensive, with 84% confidence**, because it was trained to spot insult vocabulary, and that sentence doesn’t contain any.
+The classifier calls that **non-offensive, with 84% confidence**. That’s because it was trained to spot insult vocabulary, and that sentence doesn’t contain any. This sentence is cruel without using any profanity or words that by themselves are insulting. This is the sort of linguistic subtlety that the classifier misses completely.
 
-In this exercise, the classifier keeps its job, but when it isn’t sure, it asks for a second opinion. [LLM Gateway](https://github.com/openziti/llm-gateway), NetFoundry’s open source OpenAI-compatible gateway, decides which LLM gives that opinion: a small model on your own machine for everyday messages, and Claude for the subtle ones. You won’t change a line of the Appetizer’s code.
+We’re going to fix that problem in this exercise. The classifier will keep its job spotting insulting vocabulary and swear words, but when it isn’t sure, it asks for a second opinion. That second opinion will come from LLMs connected to [LLM Gateway](https://github.com/openziti/llm-gateway), NetFoundry’s open source OpenAI-compatible gateway. LLM Gateway’s job will be to decide which LLM gives that opinion: a small model on your own machine for everyday messages, and Claude for the subtle ones. You won’t change a line of the Appetizer’s code.
 
-The whole episode comes down to one sentence:
+The whole exercise boils down to one sentence:
 
 **The app decides whether to ask an LLM. The gateway decides which LLM answers.**
 
@@ -66,28 +66,28 @@ The exercise takes about an hour, and much of that is downloading models.
                          on your machine      Anthropic API, $5 cap
 ```
 
-The classifier is still a dark service on the overlay, exactly as in episode 1. The gateway listens on `127.0.0.1` only. That’s deliberate: this episode is about what the gateway does, and putting the gateway itself on the overlay is a story for the next one.
+The classifier is still a dark service on the overlay, exactly as in the first exercise in this series. The gateway listens on `127.0.0.1` only. That’s deliberate: this exercise is about what the gateway does, and putting the gateway itself on the overlay is a story for the next one.
 
 ---
 
 ## Concepts you need
 
-Six, each tied to something you will type.
+You’ll need six concepts, each one tied to something you’ll type.
 
 | | |
 |---|---|
-| **LLM gateway** | A proxy that speaks the OpenAI chat-completions API to its callers and forwards each request to a model provider. Callers ask for a model, or for `auto`; the gateway decides where the request goes. |
-| **Provider** | Where requests end up. Here there are two: `local` (Ollama on your machine) and `anthropic` (Claude). LLM Gateway picks the provider from the model name’s prefix: `claude-*` goes to Anthropic, `gpt-*`, `o1-*` and `o3-*` go to OpenAI, and everything else goes to `local`. |
+| **LLM gateway** | A proxy that speaks the OpenAI chat-completions API to its callers and forwards each request to a model provider. Callers can ask for a specific model, or for `auto`; the gateway decides where the request goes. |
+| **Provider** | Where requests end up. In this exercise, there are two: `local` (Ollama on your machine) and `anthropic` (Claude). LLM Gateway picks the provider from the model name’s prefix: `claude-*` goes to Anthropic, `gpt-*`, `o1-*` and `o3-*` go to OpenAI, and everything else goes to `local`. |
 | **Endpoint pool** | Several addresses for one provider, used in turn, with health checks. Endpoints in a pool are *copies* of each other. The gateway doesn’t check which models each one has. |
 | **Virtual API key** | An `sk-gw-` key the gateway issues. Callers never see the real provider key, and each virtual key can be limited to particular models and routes. |
 | **Semantic routing** | When a caller asks for `auto`, the gateway turns the message into an embedding, compares it to example phrases for each route, and picks the closest. An ambiguous score goes to a small model that breaks the tie. No match at all goes to the default route. |
-| **Escalation** | The classifier’s rule for when to ask: its verdict is “clean” and its confidence is below 0.9. Confident verdicts never leave the classifier, and never cost anything. |
+| **Escalation** | The classifier’s rule for when to ask: Its verdict is “clean” and its confidence is below 0.9. Confident verdicts never leave the classifier, and never cost anything. |
 
 ---
 
 ## Prerequisites
 
-- **Episode 1, working.** Either you’ve finished [episode 1](https://github.com/AccordionGuy/openziti-appetizer-classifier) and haven’t reset it, or you’re willing to do its steps 1 to 7 first.
+- **Exercise 1, working.** Either you’ve finished [exercise 1](https://github.com/AccordionGuy/openziti-appetizer-classifier) and haven’t reset it, or you’re willing to do its steps 1 to 7 first.
 - **A Mac with Docker Desktop.** This was tested on an M5 Pro MacBook Pro with 64 GB of RAM, running macOS Tahoe. Linux should work with the changes in [Running on Linux](#running-on-linux), but it hasn’t been tested.
 - **Memory for the models.** The three models in this exercise take about 23 GB of memory when they’re all loaded, most of it for `gemma3:27b`. On a machine with less, use `gemma3:12b` as the swap target in step 12. That should work, but it hasn’t been tested.
 - **About 21 GB of disk** for the models, on top of episode 1’s 6 GB.
@@ -100,7 +100,9 @@ Six, each tied to something you will type.
 
 ## You’ll need seven terminals
 
-Three are from episode 1, and three only run background processes. This walkthrough says which terminal each command goes in.
+It may seem like a lot, but hey, terminal windows (or better yet, terminal tabs) are free!
+
+Three terminals are from episode 1, and three only run background processes. This walkthrough says which terminal each command goes in.
 
 | | Terminal | Purpose | Working directory |
 |---|---|---|---|
@@ -122,25 +124,35 @@ To quickly jump to the next step in this exercise, search for the next 💻 emoj
 
 ## Step 1: Start from where episode 1 ended
 
-If you’re starting fresh, do steps 1 to 7 of the [episode 1 README](https://github.com/AccordionGuy/openziti-appetizer-classifier), then come back here. This repo’s `classifier/` folder replaces episode 1’s in step 2 below, and behaves exactly the same until you switch it on in step 11.
+If you’re starting fresh, do steps 1 to 7 of the [exercise 1 README](https://github.com/AccordionGuy/openziti-appetizer-classifier), then come back here. This repo’s `classifier/` folder replaces episode 1’s in step 2 below, and behaves exactly the same until you switch it on in step 11.
 
-If you finished episode 1 earlier, check that its stack is still running.
+If you finished exercise 1 earlier, check that its stack is still running.
 
-💻 In Terminal 1, from your appetizer clone:
+💻 In Terminal 1, change to the directory where you cloned the Appetizer, and get a list of 
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 docker compose ps -a
 ```
 
-`quickstart`, `router`, `appetizer` and `classifier` should all show `Up`. `init-ziti-dir` should show `Exited (0)`, which is normal for a one-shot setup container.
+This command will output a table. The columns you should be most concerned about are `SERVICE` and `STATUS`, and you should see these values for them:
+
+| `STATUS`        | `SERVICE`    |
+|-----------------|--------------|
+| `appetizer`     | `Up`         |
+| `classifier`    | `Up`         |
+| `init-ziti-dir` | `Exited (0)` |
+| `quickstart`    | `Up`         |
+| `router`        | `Up`         |
+
+`init-ziti-dir` should show `Exited (0)`, which is normal for a one-shot setup container.
 
 > ### If `router` or `appetizer` shows `Exited (255)`
 >
 > Docker Desktop probably restarted underneath them. Start them again in order, then restart the classifier so its service registers cleanly:
 >
 > ```bash
-> # Terminal 1
+> # Terminal 1 (Appetizer clone directory)
 > docker compose up -d router && sleep 10
 > docker compose up -d appetizer && sleep 10
 > docker compose restart classifier
@@ -151,23 +163,23 @@ docker compose ps -a
 💻 Confirm the classifier is still hosting its service:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 docker compose exec quickstart ziti edge login https://quickstart.127.0.0.1.nip.io:1280 \
   -u admin -p admin -y --ca /ziti/pki/root-ca/certs/root-ca.cert
 docker compose exec quickstart ziti edge list terminators
 ```
 
-`classifier-service` should be one of the rows.
+These commands should result in a table, and one of the rows should contain `classifier-service` in the `SERVICE` column.
 
 ---
 
-## Step 2: Add this episode’s files
+## Step 2: Add the files for this exercise
 
 💻 In Terminal 1, from inside your appetizer clone:
 
 ```bash
-# Terminal 1
-git clone https://github.com/AccordionGuy/openziti-appetizer-llm-gateway /tmp/oalg
+# Terminal 1 (Appetizer clone directory)
+git clone https://github.com/AccordionGuy/openziti-appetizer-meets-llm-gateway /tmp/oalg
 cp -r /tmp/oalg/classifier /tmp/oalg/gateway .
 cp /tmp/oalg/docker-compose.override.yml .
 rm -rf /tmp/oalg
@@ -199,51 +211,71 @@ appetizer/
 💻 Rebuild the classifier and restart it:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 unset GATEWAY_URL
 docker compose build classifier
 docker compose up -d classifier
 ```
 
-Only the last layer of the image rebuilds, because only `classifier.py` changed, so this takes about a second. PyTorch and the model weights come from episode 1’s cached layers.
+Only the last layer of the image rebuilds, because only `classifier.py` changed, so the process should happen quickly. PyTorch and the model weights come from episode 1’s cached layers.
 
 > Don’t add anything to `requirements.txt`. Changing it invalidates the cached layer that installs PyTorch, and the rebuild goes back to taking minutes. The new code uses only Python’s standard library for exactly that reason.
 
 💻 Open Terminal 3 and follow the classifier’s log:
 
 ```bash
-# Terminal 3
+# Terminal 3 (Appetizer clone directory)
 docker compose logs -f classifier
 ```
 
-Wait for `binding ziti service classifier-service`.
+Wait for `binding ziti service classifier-service` to appear as part of the output.
 
 💻 In Terminal 2, start the reflect client with episode 1’s identity:
 
 ```bash
-# Terminal 2
+# Terminal 2 (Appetizer clone directory)
 docker run --rm -it --network appetizer_default \
   -v "$PWD":/src -w /src -v ~/.ziti-demo:/jwt \
   -v ~/.ziti-demo-gomod:/go/pkg/mod \
   golang:1.25 \
   go run clients/reflect.go local_reflectService /jwt/local_ziggy.json
 ```
-
 This is the **client command**; later steps refer back to it.
 
-💻 At the prompt, enter:
+After a moment of two, you should see the following:
+
+```
+INFO[0000] end to end encrypted connection to local_reflectService established 
+INFO[0000] you may now type a line to be sent to the server (press enter to send) 
+INFO[0000] the line will be sent to the reflect server and returned 
+Enter some text to send: 
+```
+
+💻 At the`Enter some text to send:` prompt, enter:
 
 ```
 nobody here wants you around and everyone knows it
 ```
 
-Terminal 2 relays it back to you, and Terminal 3 shows:
+Terminal 2 will relay it back to you like so:
+
+```
+wrote 51 bytes
+connection timed out, redialing connection...
+reconnected.
+attempt 2 of 3
+wrote 51 bytes
+Sent    :nobody here wants you around and everyone knows it
+Received: you sent me: nobody here wants you around and everyone knows it
+```
+
+Terminal 3 will show:
 
 ```
 classifier-1  | clean by=classifier {'label': 'non-offensive', 'score': 0.8415723443031311} :: nobody here wants you around and everyone knows it
 ```
 
-The only difference from episode 1 is `by=classifier`, which says who made the call. Right now that’s always the classifier. By step 11 it will be a model the gateway picked.
+The only difference from exercise 1 is `by=classifier`. `by=` says who made the call, and right now, that’s always the classifier. By step 11 it will be a model that LLM Gateway picked.
 
 ---
 
@@ -254,7 +286,7 @@ You need LLM Gateway **v0.1.7 or later**. Earlier versions don’t have the test
 💻 Download the release with `curl` rather than a browser. macOS quarantines files that browsers download, and `curl` skips that.
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 cd ~/Downloads
 curl -LO https://github.com/openziti/llm-gateway/releases/download/v0.1.7/llm-gateway_0.1.7_darwin_arm64.tar.gz
 tar xzf llm-gateway_0.1.7_darwin_arm64.tar.gz llm-gateway
@@ -267,7 +299,7 @@ On an Intel Mac, use `darwin_amd64` in place of `darwin_arm64`.
 💻 Make sure `~/bin` and Go’s `~/go/bin` are on your PATH, and that no older copy is hiding the new one:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 echo 'export PATH="$HOME/bin:$HOME/go/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 which -a llm-gateway
 llm-gateway version
@@ -297,7 +329,7 @@ If Go complains that the module needs a newer version, put `GOTOOLCHAIN=auto` in
 💻 Install jq, which the shell helpers in step 6 use:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 brew install jq
 ```
 
@@ -310,14 +342,14 @@ brew install jq
 💻 Quit the Ollama menu-bar app if it’s running (click the llama icon, then **Quit Ollama**), then make sure nothing else holds its port:
 
 ```bash
-# Terminal 5
+# Terminal 5 (any directory)
 lsof -nP -iTCP:11434 -sTCP:LISTEN     # should print nothing
 ```
 
 💻 Start Ollama:
 
 ```bash
-# Terminal 5
+# Terminal 5 (any directory)
 OLLAMA_KEEP_ALIVE=2h OLLAMA_MAX_LOADED_MODELS=3 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
 ```
 
@@ -334,7 +366,7 @@ Without these settings, the test machine reloaded a model on every escalation: *
 💻 In Terminal 1, pull the three models:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 ollama pull gemma3:4b           # the general route, and the gateway's tie-breaker
 ollama pull nomic-embed-text    # turns messages into embeddings for semantic routing
 ollama pull gemma3:27b          # the swap target in step 12; about 17 GB
@@ -369,7 +401,7 @@ The gateway issues its own keys, so the classifier never holds your Anthropic ke
 💻 Generate two, one for the classifier and one for you:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 llm-gateway genkey
 llm-gateway genkey
 ```
@@ -379,7 +411,7 @@ llm-gateway genkey
 💻 Load the keys and the shell helpers in Terminal 1 and Terminal 4:
 
 ```bash
-# Terminal 1 and Terminal 4
+# Terminal 1 (Appetizer clone directory) and Terminal 4
 . gateway/env.sh; . gateway/helpers.sh
 type ask        # should print: ask is a shell function
 ```
@@ -402,19 +434,19 @@ Before putting a real model behind the gateway, prove the gateway works with no 
 💻 Start two of them, one per terminal:
 
 ```bash
-# Terminal 6
+# Terminal 6 (any directory)
 dummy-model --listen 127.0.0.1:8081 --response "answered by dummy-a"
 ```
 
 ```bash
-# Terminal 7
+# Terminal 7 (any directory)
 dummy-model --listen 127.0.0.1:8082 --response "answered by dummy-b"
 ```
 
 💻 Look at `gateway/tour-1-roundrobin.yml`. It’s short: one provider with two endpoints, health-checked every five seconds. Start the gateway with it:
 
 ```bash
-# Terminal 4
+# Terminal 4 (Appetizer clone directory)
 llm-gateway run gateway/tour-1-roundrobin.yml
 ```
 
@@ -423,7 +455,7 @@ Wait for `listening on '127.0.0.1:8080'`.
 💻 Send four requests:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 for i in 1 2 3 4; do ask dummy hi; done
 ```
 
@@ -439,7 +471,7 @@ That’s round-robin: each request goes to the next endpoint in the pool.
 💻 Now kill dummy-b with **Ctrl-C** in Terminal 7, and send four more:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 for i in 1 2 3 4; do ask dummy hi; done
 ```
 
@@ -462,14 +494,14 @@ What happens if the endpoints in a pool don’t have the same models?
 💻 Stop the gateway with **Ctrl-C** in Terminal 4. Look at `gateway/tour-2-pool.yml`: the pool now holds Ollama and dummy-a. Start the gateway with it:
 
 ```bash
-# Terminal 4
+# Terminal 4 (Appetizer clone directory)
 llm-gateway run gateway/tour-2-pool.yml
 ```
 
 💻 Ask for a model only Ollama has:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 for i in 1 2 3 4; do ask gemma3:4b "say hi in five words"; done
 ```
 
@@ -500,7 +532,7 @@ From here on, the gateway runs with `gateway/llm-gateway.yml`. Open it and look 
 💻 Stop the gateway with **Ctrl-C** in Terminal 4 and start it with the full config:
 
 ```bash
-# Terminal 4
+# Terminal 4 (Appetizer clone directory)
 llm-gateway run gateway/llm-gateway.yml
 ```
 
@@ -511,7 +543,7 @@ The first start takes several seconds, because the gateway turns every route exa
 💻 Try four requests:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 ask gemma3:4b hi
 ask gemma3:4b hi "$CLASSIFIER_GATEWAY_KEY"
 ask claude-opus-5-5 hi "$CLASSIFIER_GATEWAY_KEY"
@@ -557,7 +589,7 @@ Only the **last user message** is embedded. That’s why the classifier puts its
 💻 Send the classifier’s exact request for three phrases:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 judge "you are a delight"
 judge "nobody here wants you around and everyone knows it"
 judge "people like you should not be allowed to speak"
@@ -629,7 +661,7 @@ The switch is one environment variable. Compose reads it, along with the classif
 💻 In Terminal 1:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 . gateway/env.sh
 export GATEWAY_URL=http://host.docker.internal:8080
 docker compose up -d classifier
@@ -641,7 +673,7 @@ docker compose exec classifier printenv GATEWAY_URL     # http://host.docker.int
 💻 Recreating the container ended Terminal 3’s log stream, so start it again:
 
 ```bash
-# Terminal 3
+# Terminal 3 (Appetizer clone directory)
 docker compose logs -f classifier
 ```
 
@@ -683,7 +715,7 @@ Suppose your security team rules that user messages can’t go to a third-party 
 💻 Change the `subtle` route’s model from Claude to the big local model:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 sed -i '' 's#model: claude-haiku-4-5-20251001#model: "gemma3:27b"#' gateway/llm-gateway.yml
 grep -n 'gemma3:27b' gateway/llm-gateway.yml
 ```
@@ -693,7 +725,7 @@ If you’d rather edit the file by hand, keep the quotes around `"gemma3:27b"`, 
 💻 Restart the gateway with **Ctrl-C** in Terminal 4, then:
 
 ```bash
-# Terminal 4
+# Terminal 4 (Appetizer clone directory)
 llm-gateway run gateway/llm-gateway.yml
 ```
 
@@ -714,7 +746,7 @@ The classifier didn’t change. The Appetizer didn’t change. The classifier as
 💻 Time it, twice, so the second run has the model loaded:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 time (judge "nobody here wants you around and everyone knows it")
 time (judge "nobody here wants you around and everyone knows it")
 ```
@@ -724,7 +756,7 @@ The parentheses matter in zsh, which prints no timing for a shell function that 
 💻 Put Claude back when you’re done:
 
 ```bash
-# Terminal 1
+# Terminal 1 (Appetizer clone directory)
 sed -i '' 's#model: "gemma3:27b"#model: claude-haiku-4-5-20251001#' gateway/llm-gateway.yml
 ```
 
@@ -820,7 +852,7 @@ Coming next: the model stops answering questions and starts choosing what to do.
 go-m1cpu only runs on macOS, so a Linux build of the gateway in a container avoids the crash. This fallback hasn’t been tested end to end.
 
 ```bash
-# Terminal 1, from your appetizer clone. One-time: build a Linux binary
+# Terminal 1 (Appetizer clone directory), from your appetizer clone. One-time: build a Linux binary
 docker run --rm -v "$PWD/gateway/bin":/go/bin golang:1.26 \
   go install github.com/openziti/llm-gateway/cmd/llm-gateway@v0.1.7
 
@@ -832,7 +864,7 @@ done
 ```
 
 ```bash
-# Terminal 4, in place of every `llm-gateway run gateway/<name>.yml`
+# Terminal 4 (Appetizer clone directory), in place of every `llm-gateway run gateway/<name>.yml`
 docker run --rm -it -p 127.0.0.1:8080:8080 -v "$PWD/gateway":/cfg \
   -e ANTHROPIC_API_KEY -e CLASSIFIER_GATEWAY_KEY -e MY_GATEWAY_KEY \
   golang:1.26 /cfg/bin/llm-gateway run /cfg/llm-gateway.docker.yml
@@ -860,7 +892,7 @@ This exercise was written and tested on macOS. On Linux, three things differ. Th
 2. Switch off escalation:
 
     ```bash
-    # Terminal 1
+    # Terminal 1 (Appetizer clone directory)
     unset GATEWAY_URL
     docker compose up -d classifier
     ```

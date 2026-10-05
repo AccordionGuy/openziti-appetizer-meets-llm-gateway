@@ -326,11 +326,20 @@ which dummy-model
 
 If Go complains that the module needs a newer version, put `GOTOOLCHAIN=auto` in front of the command.
 
-💻 Install jq, which the shell helpers in step 6 use:
+💻 Install jq, which the shell helpers in step 6 use. On macOS with Homebrew:
 
 ```bash
-# Terminal 1 (Appetizer clone directory)
+# Terminal 1
 brew install jq
+```
+
+On Linux or WSL, use your package manager instead: `sudo apt install jq` (Debian, Ubuntu, WSL), `sudo dnf install jq` (Fedora, RHEL), or `sudo pacman -S jq` (Arch). Binaries for other systems are at https://jqlang.org/download/.
+
+Check it worked:
+
+```bash
+# Terminal 1
+jq --version
 ```
 
 ---

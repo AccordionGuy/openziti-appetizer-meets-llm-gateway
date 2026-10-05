@@ -355,6 +355,8 @@ jq --version
 lsof -nP -iTCP:11434 -sTCP:LISTEN     # should print nothing
 ```
 
+The command above should produce no output.
+
 💻 Start Ollama:
 
 ```bash
@@ -415,6 +417,8 @@ llm-gateway genkey
 llm-gateway genkey
 ```
 
+These commands will produce two keys, each beginning with `sk-gw-`.
+
 💻 Open `gateway/env.sh` in an editor and fill in all three keys: your Anthropic key from step 5, and the two `sk-gw-` keys you just generated. Never `cat` this file anywhere people can see your screen.
 
 💻 Load the keys and the shell helpers in Terminal 1 and Terminal 4:
@@ -468,6 +472,9 @@ Wait for `listening on '127.0.0.1:8080'`.
 for i in 1 2 3 4; do ask dummy hi; done
 ```
 
+You should see output that looks like this:
+
+
 ```
 dummy → answered by dummy-a
 dummy → answered by dummy-b
@@ -492,7 +499,21 @@ endpoint 'dummy-b' is now unhealthy
 
 The gateway saw a connection fail, marked the endpoint unhealthy, and retried the request on dummy-a. **Network errors fail over. Bad requests don’t.** A 400 or a model-not-found goes straight back to the caller, because sending the same bad request to another backend would get the same answer.
 
-💻 Restart dummy-b in Terminal 7 (the same command as before), then rerun the loop every 15 seconds or so. Within about a minute, Terminal 4 logs `endpoint 'dummy-b' is now healthy` and the alternation returns. It takes a while because the gateway backs off its health checks after repeated failures, so a flapping backend doesn’t get hammered.
+💻 Restart dummy-b in Terminal 7 (the same command as before)...
+
+```bash
+# Terminal 7 (any directory)
+dummy-model --listen 127.0.0.1:8082 --response "answered by dummy-b"
+```
+
+💻 ...then rerun the loop every 15 seconds or so. 
+
+```bash
+# Terminal 1 (Appetizer clone directory)
+for i in 1 2 3 4; do ask dummy hi; done
+```
+
+Within about a minute, Terminal 4 logs `endpoint 'dummy-b' is now healthy` and the alternation returns. It takes a while because the gateway backs off its health checks after repeated failures, so a flapping backend doesn’t get hammered.
 
 ---
 
@@ -513,6 +534,8 @@ llm-gateway run gateway/tour-2-pool.yml
 # Terminal 1 (Appetizer clone directory)
 for i in 1 2 3 4; do ask gemma3:4b "say hi in five words"; done
 ```
+
+You should see this output:
 
 ```
 gemma3:4b → Hello, how are you today?
@@ -542,6 +565,7 @@ From here on, the gateway runs with `gateway/llm-gateway.yml`. Open it and look 
 
 ```bash
 # Terminal 4 (Appetizer clone directory)
+source gateway/env.sh
 llm-gateway run gateway/llm-gateway.yml
 ```
 
@@ -558,6 +582,8 @@ ask gemma3:4b hi "$CLASSIFIER_GATEWAY_KEY"
 ask claude-opus-5-5 hi "$CLASSIFIER_GATEWAY_KEY"
 ask claude-haiku-4-5-20251001 "say hi" "$CLASSIFIER_GATEWAY_KEY"
 ```
+
+You should see output that looks like this:
 
 ```
 error → API key required

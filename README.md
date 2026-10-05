@@ -1,5 +1,7 @@
 # A Second Opinion for the OpenZiti Appetizer Classifier
 
+![llm-gateway meets the openziti appetizer](./docs/images/title%20card.jpg)
+
 In [the first exercise in this series](https://github.com/AccordionGuy/openziti-appetizer-classifier), you gave the [OpenZiti Appetizer](https://openziti.io/docs/learn/appetizer/) a classifier that decides whether a message is offensive before the Appetizer relays it. That classifier is fast, free, and gives the same answer every time. It’s also confidently wrong about messages like this one:
 
 > nobody here wants you around and everyone knows it
@@ -795,7 +797,12 @@ The parentheses matter in zsh, which prints no timing for a shell function that 
 sed -i '' 's#model: "gemma3:27b"#model: claude-haiku-4-5-20251001#' gateway/llm-gateway.yml
 ```
 
-Then restart the gateway in Terminal 4.
+💻 Then restart the gateway in Terminal 4:
+
+```bash
+# Terminal 4
+llm-gateway run gateway/llm-gateway.yml
+```
 
 ---
 
@@ -826,7 +833,13 @@ provider error: request failed: Post "http://127.0.0.1:11434/v1/chat/completions
 
 The embeddings run on Ollama too, so the router couldn’t embed the message. It fell back to its default route, and that route also lives on Ollama. The request never got as far as Claude, even though Claude was available the whole time. Worth knowing before you put one box under everything.
 
-💻 Start Ollama again in Terminal 5 with the same command as step 4. The models reload on their first use.
+💻 Start Ollama again in Terminal 5:
+
+```bash
+OLLAMA_KEEP_ALIVE=2h OLLAMA_MAX_LOADED_MODELS=3 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
+```
+
+The models reload on their first use.
 
 ---
 
